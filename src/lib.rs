@@ -119,9 +119,15 @@ impl PathExt for Path {
         use std::path;
 
         let mut buf = String::new();
-        for c in self.components() {
-            match c {
-                path::Component::RootDir => { /* empty */ }
+        let mut it = self.components();
+        let mut c = it.next();
+        while c.is_some() {
+            match c.unwrap() {
+                path::Component::RootDir => {
+                    buf.push('/');
+                    c = it.next();
+                    continue;
+                }
                 path::Component::CurDir => buf.push('.'),
                 path::Component::ParentDir => buf.push_str(".."),
                 path::Component::Prefix(ref prefix) => {
@@ -129,18 +135,20 @@ impl PathExt for Path {
                     match s.to_str() {
                         Some(ref s) => buf.push_str(s),
                         None => buf.push_str(&s.to_string_lossy()),
-                    }
+                    };
+                    c = it.next();
+                    continue;
                 }
                 path::Component::Normal(ref s) => match s.to_str() {
                     Some(ref s) => buf.push_str(s),
                     None => buf.push_str(&s.to_string_lossy()),
                 },
             }
-            buf.push('/');
-        }
 
-        if buf != "/" {
-            buf.pop(); // Pop last '/'
+            c = it.next();
+            if c.is_some() {
+                buf.push('/')
+            }
         }
 
         buf
@@ -192,25 +200,41 @@ impl PathExt for Path {
     #[cfg(target_os = "windows")]
     fn to_slash(&self) -> Option<String> {
         use std::path;
-        let components = self
-            .components()
-            .map(|c| match c {
-                path::Component::RootDir => Some(""),
-                path::Component::CurDir => Some("."),
-                path::Component::ParentDir => Some(".."),
-                path::Component::Prefix(ref p) => p.as_os_str().to_str(),
-                path::Component::Normal(ref s) => s.to_str(),
-            })
-            .collect::<Option<Vec<_>>>();
-
-        components.map(|v| {
-            if v.len() == 1 && v[0].is_empty() {
-                // Special case for '/'
-                "/".to_string()
-            } else {
-                v.join("/")
+        let mut buf = String::new();
+        let mut it = self.components().into_iter();
+        let mut c = it.next();
+        while c.is_some() {
+            match c.unwrap() {
+                path::Component::RootDir => {
+                    buf.push('/');
+                    c = it.next();
+                    continue;
+                },
+                path::Component::CurDir => buf.push_str("."),
+                path::Component::ParentDir => buf.push_str(".."),
+                path::Component::Prefix(ref p) => {
+                    match p.as_os_str().to_str() {
+                        Some(p) => buf.push_str(p),
+                        None => return None
+                    }
+                    c = it.next();
+                    continue;
+                },
+                path::Component::Normal(ref s) => {
+                    match s.to_str() {
+                        Some(s) => buf.push_str(s),
+                        None => return None
+                    }
+                },
             }
-        })
+
+            c = it.next();
+            if c.is_some() {
+                buf.push('/')
+            }
+        }
+
+        Some(buf)
     }
 }
 
